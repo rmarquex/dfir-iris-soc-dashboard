@@ -1,0 +1,13 @@
+# Segredos e Tokens
+.env
+
+# Lixo do Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+
+# Arquivos gerados pelo script (CSVs, JSONs)
+*.csv
+*.json

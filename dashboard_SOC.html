@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFIR IRIS — SOC Dashboard v3</title>
+<style>
+  :root {
+    --bg:      #0a0e1a;
+    --surface: #111827;
+    --card:    #161d2e;
+    --border:  #1e2d45;
+    --accent:  #2563eb;
+    --accent2: #0ea5e9;
+    --green:   #10b981;
+    --yellow:  #f59e0b;
+    --red:     #ef4444;
+    --purple:  #8b5cf6;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --muted2:  #94a3b8;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(90deg, #0a0e1a 0%, #111827 60%, #0f1e35 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .logo h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo p  { font-size: 12px; color: var(--muted2); margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #period-display { background: var(--card); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; color: var(--accent2); }
+  #last-update { font-size: 11px; color: var(--muted); }
+
+  main { padding: 24px 32px; max-width: 1700px; margin: 0 auto; }
+
+  .upload-area {
+    background: var(--card); border: 1.5px dashed var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    display: flex; align-items: center; gap: 20px;
+    margin-bottom: 24px; cursor: pointer; transition: border-color .2s;
+    position: relative;
+  }
+  .upload-area:hover { border-color: var(--accent); }
+  .upload-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 28px; flex-shrink: 0; }
+  .upload-text h3 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .upload-text p  { font-size: 12px; color: var(--muted2); }
+  .file-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .chip { background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 3px 10px; font-size: 11px; color: var(--muted2); }
+  .chip.loaded { border-color: var(--green); color: var(--green); }
+
+  .info-banner {
+    background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3);
+    border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent2);
+    margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .info-banner code { background: var(--surface); padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--muted); margin: 28px 0 12px;
+    display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content:''; flex: 1; height: 1px; background: var(--border); }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; position: relative; overflow: hidden; }
+  .kpi::before { content:''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--accent); }
+  .kpi.g::before { background: var(--green); }
+  .kpi.y::before { background: var(--yellow); }
+  .kpi.r::before { background: var(--red); }
+  .kpi.p::before { background: var(--purple); }
+  .kpi.c::before { background: var(--accent2); }
+  .kpi-label { font-size: 11px; color: var(--muted2); text-transform: uppercase;
+    letter-spacing: .6px; margin-bottom: 8px; }
+  .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; }
+  .kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .filters {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+  }
+  .f-group { display: flex; flex-direction: column; gap: 4px; }
+  .f-group label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+  .f-group select, .f-group input {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    padding: 7px 10px; border-radius: 7px; font-size: 13px; outline: none;
+    transition: border-color .15s;
+  }
+  .f-group input[type=date] { color-scheme: dark; }
+  .f-group select:focus, .f-group input:focus { border-color: var(--accent); }
+  .f-group.grow { flex: 1; min-width: 180px; }
+  .f-group input.wide { width: 100%; }
+
+  .metric-toggle {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .metric-toggle-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .toggle-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--border); transition: .3s; border-radius: 24px;
+  }
+  .toggle-slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: white; transition: .3s; border-radius: 50%;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+  .toggle-label { font-size: 13px; color: var(--text); font-weight: 600; }
+  .toggle-sublabel { font-size: 11px; color: var(--muted2); margin-top: 2px; }
+  .mode-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .mode-badge.strict { background: rgba(37,99,235,.15); color: var(--accent2); border: 1px solid rgba(37,99,235,.3); }
+  .mode-badge.total { background: rgba(139,92,246,.15); color: var(--purple); border: 1px solid rgba(139,92,246,.3); }
+
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media(max-width:900px){ .charts-grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .panel-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--muted2); margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+
+  .an-row { margin-bottom: 14px; }
+  .an-info { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+  .an-name { font-weight: 600; color: var(--text); }
+  .an-stats { color: var(--muted2); font-size: 12px; }
+  .bar-track { background: var(--border); border-radius: 4px; height: 7px; overflow: hidden; display: flex; }
+  .bar-a { background: var(--yellow); height: 100%; transition: width .4s; border-radius: 4px 0 0 4px; }
+  .bar-c { background: var(--accent); height: 100%; transition: width .4s; }
+  .bar-cc { background: var(--green); height: 100%; transition: width .4s; border-radius: 0 4px 4px 0; }
+
+  .sev-row { margin-bottom: 10px; }
+  .sev-info { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: var(--muted2); }
+  .sev-bar  { height: 6px; border-radius: 3px; transition: width .4s; }
+
+  .email-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-top: 16px; }
+  .email-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .email-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .email-kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 6px; }
+  .email-kpi-value { font-size: 20px; font-weight: 700; }
+
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-toolbar { display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 18px; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+  .view-tabs { display: flex; gap: 4px; }
+  .view-tab { background: none; border: 1px solid var(--border); color: var(--muted2);
+    padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all .15s; }
+  .view-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .view-tab:hover:not(.active) { border-color: var(--accent2); color: var(--text); }
+  .view-tab.export { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+  .view-tab.clear-col-filters { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; font-size: 11px; }
+  .row-count { font-size: 12px; color: var(--muted); }
+  .active-col-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .col-filter-chip {
+    background: rgba(37, 99, 235, 0.2); border: 1px solid var(--accent);
+    color: var(--accent2); padding: 3px 8px; border-radius: 12px;
+    font-size: 11px; display: inline-flex; align-items: center; gap: 4px;
+    cursor: pointer;
+  }
+  .col-filter-chip:hover { background: rgba(239, 68, 68, 0.2); border-color: var(--red); color: #fca5a5; }
+  .scroll-t { overflow: auto; max-height: 620px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface); color: var(--muted); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .6px; padding: 10px 16px;
+    position: sticky; top: 0; z-index: 10; cursor: pointer; white-space: nowrap;
+    border-bottom: 1px solid var(--border); user-select: none;
+    transition: background .15s;
+  }
+  th:hover { color: var(--text); background: #1a2338; }
+  th.filtered { background: rgba(37, 99, 235, 0.15); color: var(--accent2); }
+  th .th-content { display: inline-flex; align-items: center; gap: 6px; }
+  th .filter-icon {
+    opacity: 0.4; font-size: 11px; transition: opacity .15s;
+    padding: 2px 4px; border-radius: 3px;
+  }
+  th:hover .filter-icon { opacity: 0.8; }
+  th.filtered .filter-icon { opacity: 1; color: var(--accent2); }
+  td { padding: 10px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td.wrap { white-space: normal; min-width: 220px; max-width: 360px; word-break: break-word; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(37,99,235,.06); }
+  tr.handoff td { background: rgba(139, 92, 246, 0.05); }
+  .sort-ind { margin-left: 4px; color: var(--accent2); font-size: 9px; }
+
+  .col-filter-dropdown {
+    position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 1000; min-width: 200px; max-width: 320px; max-height: 400px;
+    overflow-y: auto; font-size: 12px;
+  }
+  .col-filter-dropdown .cf-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+    color: var(--muted2); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .col-filter-dropdown input[type=text],
+  .col-filter-dropdown input[type=date] {
+    width: 100%; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 8px; border-radius: 5px; font-size: 12px;
+    margin-bottom: 6px; outline: none;
+  }
+  .col-filter-dropdown input:focus { border-color: var(--accent); }
+  .col-filter-dropdown .cf-checkbox-list {
+    max-height: 240px; overflow-y: auto; margin: 6px 0;
+  }
+  .col-filter-dropdown .cf-checkbox-item {
+    display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+    border-radius: 4px; cursor: pointer; transition: background .1s;
+  }
+  .col-filter-dropdown .cf-checkbox-item:hover { background: var(--card); }
+  .col-filter-dropdown .cf-checkbox-item input[type=checkbox] { cursor: pointer; }
+  .col-filter-dropdown .cf-checkbox-item .cf-label {
+    flex: 1; color: var(--text); font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .col-filter-dropdown .cf-checkbox-item .cf-count {
+    color: var(--muted); font-size: 10px; font-weight: 600;
+  }
+  .col-filter-dropdown .cf-actions {
+    display: flex; gap: 6px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .col-filter-dropdown .cf-btn {
+    flex: 1; padding: 6px 10px; border-radius: 5px; font-size: 11px;
+    font-weight: 600; cursor: pointer; border: none; transition: all .15s;
+  }
+  .col-filter-dropdown .cf-btn.apply { background: var(--accent); color: #fff; }
+  .col-filter-dropdown .cf-btn.apply:hover { background: var(--accent2); }
+  .col-filter-dropdown .cf-btn.clear { background: var(--border); color: var(--text); }
+  .col-filter-dropdown .cf-btn.clear:hover { background: var(--red); color: #fff; }
+  .col-filter-dropdown .cf-select-all {
+    display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+    margin-bottom: 4px; cursor: pointer; color: var(--accent2); font-weight: 600; font-size: 11px;
+  }
+  .col-filter-dropdown .cf-select-all:hover { background: var(--card); border-radius: 4px; }
+  .col-filter-dropdown .cf-search { margin-bottom: 6px; }
+  
+  .col-filter-dropdown .cf-radio-group {
+    display: flex; flex-direction: column; gap: 4px; margin: 8px 0;
+  }
+  .col-filter-dropdown .cf-radio-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-radius: 6px; cursor: pointer; transition: background .15s;
+    border: 1px solid var(--border);
+  }
+  .col-filter-dropdown .cf-radio-item:hover { background: var(--card); border-color: var(--accent); }
+  .col-filter-dropdown .cf-radio-item input[type=radio] { 
+    cursor: pointer; accent-color: var(--accent); 
+    width: 16px; height: 16px;
+  }
+  .col-filter-dropdown .cf-radio-item.selected {
+    background: rgba(37, 99, 235, 0.1); border-color: var(--accent);
+  }
+  .col-filter-dropdown .cf-radio-label {
+    flex: 1; color: var(--text); font-size: 12px; font-weight: 500;
+  }
+  .col-filter-dropdown .cf-radio-count {
+    color: var(--muted); font-size: 11px; font-weight: 600;
+    background: var(--border); padding: 2px 8px; border-radius: 10px;
+  }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 7px;
+    border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+  .badge.critical { background: rgba(239,68,68,.12); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .badge.high     { background: rgba(245,158,11,.12); color: #fbbf24; border: 1px solid rgba(245,158,11,.2); }
+  .badge.medium   { background: rgba(37,99,235,.12);  color: #60a5fa; border: 1px solid rgba(37,99,235,.2); }
+  .badge.low      { background: rgba(148,163,184,.1);  color: #cbd5e1; border: 1px solid rgba(148,163,184,.2); }
+  .badge.unknown  { background: rgba(100,116,139,.1);  color: #94a3b8; border: 1px solid rgba(100,116,139,.2); }
+  .badge.fechado  { background: rgba(16,185,129,.12); color: #34d399; border: 1px solid rgba(16,185,129,.2); }
+  .badge.aberto   { background: rgba(37,99,235,.12);  color: #60a5fa; border: 1px solid rgba(37,99,235,.2); }
+  .badge.merged   { background: rgba(139,92,246,.12); color: #c084fc; border: 1px solid rgba(139,92,246,.2); }
+  .badge.handoff  { background: rgba(139,92,246,.15); color: #c084fc; border: 1px solid rgba(139,92,246,.3); font-size: 9px; }
+
+  .t-fast   { color: var(--green); font-weight: 600; }
+  .t-ok     { color: var(--accent2); font-weight: 600; }
+  .t-slow   { color: var(--yellow); font-weight: 600; }
+  .t-late   { color: var(--red); font-weight: 600; }
+  .t-none   { color: var(--muted); }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--muted2); margin-top: 12px; }
+  .leg-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .mttr-fast { color: var(--green); font-weight: 600; }
+  .mttr-ok { color: var(--accent2); font-weight: 600; }
+  .mttr-slow { color: var(--yellow); font-weight: 600; }
+  .mttr-late { color: var(--red); font-weight: 600; }
+
+  .hint { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 4px; }
+  
+  .na-value { color: var(--muted); font-style: italic; }
+  .metric-good { color: var(--green); font-weight: 600; }
+  .metric-bad { color: var(--red); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡</div>
+    <div>
+      <h1>DFIR IRIS — SOC Dashboard v3</h1>
+      <p>GlobalTechTI · Multi-Analista com MTTA/MTTR Separados</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="period-display">⏱ Aguardando arquivos...</span>
+    <span id="last-update"></span>
+  </div>
+</header>
+
+<main>
+
+  <div class="upload-area">
+    <div class="upload-icon">📂</div>
+    <div class="upload-text">
+      <h3>Selecione a pasta com os arquivos CSV</h3>
+      <p>Necessário: <code>*_alertas.csv</code> e <code>*_cases.csv</code> &nbsp;|&nbsp; Opcional: <code>emails.csv</code></p>
+    </div>
+    <div class="file-chips">
+      <span class="chip" id="chip-alerts">alerts —</span>
+      <span class="chip" id="chip-cases">cases —</span>
+      <span class="chip" id="chip-emails">emails —</span>
+      <span class="chip" id="chip-debug" style="display:none">debug</span>
+    </div>
+    <input type="file" id="files" webkitdirectory multiple>
+  </div>
+
+  <div class="info-banner">
+    <strong>ℹ️ Multi-Analista + MTTA/MTTR:</strong> Cada alerta aparece para todos analistas que atuaram. <strong>MTTA</strong> = tempo até a <u>primeira ação</u>. <strong>MTTR</strong> = tempo até <u>resolução/fechamento</u> (apenas para quem fechou). O campo <strong>"atual_owner"</strong> indica o dono formal atual.
+  </div>
+
+  <div class="metric-toggle">
+    <div class="metric-toggle-left">
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-first-only" checked>
+        <span class="toggle-slider"></span>
+      </label>
+      <div>
+        <div class="toggle-label">
+          Contar apenas <strong>primeiro analista a agir</strong>
+        </div>
+        <div class="toggle-sublabel">
+          Soma dos analistas = Total real de alertas/cases (sem inflar por hand-offs)
+        </div>
+      </div>
+    </div>
+    <div id="mode-indicator">
+      <span class="mode-badge strict" id="mode-badge">📊 MODO PRODUTIVIDADE</span>
+    </div>
+  </div>
+
+  <div class="section-title">Visão Geral</div>
+  <div class="kpi-grid">
+    <div class="kpi y"><div class="kpi-label">🚨 Alertas Únicos</div><div class="kpi-value" id="k-alerts-unique">—</div><div class="kpi-sub" id="k-alerts-entries"></div></div>
+    <div class="kpi"  ><div class="kpi-label">💼 Cases Únicos</div><div class="kpi-value" id="k-cases-unique">—</div><div class="kpi-sub" id="k-cases-entries"></div></div>
+    <div class="kpi g"><div class="kpi-label">✅ Fechados</div><div class="kpi-value" id="k-closed">—</div></div>
+    <div class="kpi p"><div class="kpi-label">⏳ Abertos</div><div class="kpi-value" id="k-open">—</div></div>
+    <div class="kpi r"><div class="kpi-label">🛡 Falsos Positivos</div><div class="kpi-value" id="k-fp">—</div><div class="kpi-sub" id="k-fp-rate"></div></div>
+    <div class="kpi c"><div class="kpi-label">✉ E-mails Enviados</div><div class="kpi-value" id="k-emails">—</div><div class="kpi-sub" id="k-emails-match"></div></div>
+    <div class="kpi c"><div class="kpi-label">⏱ T.Médio E-mail (Alerta)</div><div class="kpi-value" id="k-email-avg-a">—</div></div>
+    <div class="kpi c"><div class="kpi-label">⏱ T.Médio E-mail (Case)</div><div class="kpi-value" id="k-email-avg-c">—</div></div>
+  </div>
+
+  <div class="section-title">Análise</div>
+  <div class="charts-grid">
+    <div class="panel">
+      <div class="panel-title">👥 Volumetria por Analista <span id="analyst-mode-hint" style="font-size:10px;color:var(--muted);font-weight:400;margin-left:6px">(modo produtividade)</span></div>
+      <div id="analyst-bars"><div class="empty">Sem dados</div></div>
+      <div class="legend" style="margin-top:14px">
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--yellow)"></div>Alertas</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--accent)"></div>Cases totais</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--green)"></div>Cases fechados</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🔥 Distribuição de Severidade</div>
+      <div id="sev-bars"><div class="empty">Sem dados</div></div>
+    </div>
+  </div>
+
+  <div class="email-panel">
+    <div class="panel-title">✉ Tempo até Envio de E-mail (a partir da criação no IRIS)</div>
+    <div class="email-kpis" id="email-analyst-kpis"><div class="empty">Carregue o emails.csv para ver esta seção</div></div>
+    <div id="email-analyst-bars"></div>
+  </div>
+
+  <div class="section-title">Registros Detalhados</div>
+  <div class="filters" style="margin-bottom:14px">
+    <div class="f-group grow">
+      <label>🔍 Busca</label>
+      <input type="text" id="search" placeholder="ID, título, cliente, analista, atual_owner..." class="wide">
+    </div>
+    <div class="f-group">
+      <label>👤 Analista (atuou)</label>
+      <select id="sel-analyst"><option value="">Todos</option></select>
+    </div>
+    <div class="f-group">
+      <label>🏢 Cliente</label>
+      <select id="sel-customer"><option value="">Todos</option></select>
+    </div>
+    <div class="f-group">
+      <label>🔥 Severidade</label>
+      <select id="sel-sev">
+        <option value="">Todas</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+    <div class="f-group">
+      <label>✉ E-mail</label>
+      <select id="sel-email">
+        <option value="">Todos</option>
+        <option value="yes">Com e-mail</option>
+        <option value="no">Sem e-mail</option>
+      </select>
+    </div>
+    <div class="f-group">
+      <label>🔄 Hand-off</label>
+      <select id="sel-handoff">
+        <option value="">Todos</option>
+        <option value="yes">Com hand-off</option>
+        <option value="no">Sem hand-off</option>
+      </select>
+    </div>
+    <div class="f-group">
+      <label>📅 De</label>
+      <input type="date" id="dt-from">
+    </div>
+    <div class="f-group">
+      <label>📅 Até</label>
+      <input type="date" id="dt-to">
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="view-tabs">
+        <button class="view-tab active" id="tab-alerts" onclick="setView('alertas')">🚨 Alertas</button>
+        <button class="view-tab" id="tab-cases" onclick="setView('cases')">💼 Cases</button>
+        <button class="view-tab export" onclick="exportFiltered()">📥 Exportar Filtrado</button>
+        <button class="view-tab clear-col-filters" id="btn-clear-col-filters" onclick="clearAllColumnFilters()" style="display:none">🧹 Limpar Filtros</button>
+      </div>
+      <div id="active-col-filters" class="active-col-filters"></div>
+      <div class="row-count" id="row-count">0 registros</div>
+    </div>
+    <div class="scroll-t" id="table-scroll-container" style="position:relative">
+      <table><thead id="t-head"></thead><tbody id="t-body"><tr><td class="empty" colspan="12">Selecione os arquivos CSV para iniciar.</td></tr></tbody></table>
+    </div>
+    <div class="hint" style="padding: 8px 18px; border-top: 1px solid var(--border);">
+      💡 <strong>Dica:</strong> Clique em <strong>cabeçalho</strong> para ordenar · Clique em <strong>🔽</strong> para filtrar por coluna · <strong>MTTA</strong> = tempo até 1ª ação · <strong>MTTR</strong> = tempo até resolução
+    </div>
+  </div>
+
+</main>
+
+<script>
+let alertas = [], cases = [], emails = [];
+let view = 'alertas';
+let sort = { key: 'created', dir: 'desc' };
+let columnFilters = {};
+let openDropdown = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function usersMatch(a, b) {
+  if (!a || !b) return false;
+  a = a.toLowerCase().split('@')[0].trim();
+  b = b.toLowerCase().split('@')[0].trim();
+  return a === b;
+}
+
+// 🔧 PARSER DE CSV CORRIGIDO - filtra linhas vazias e com apenas separadores
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (!lines.length) return [];
+  const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.trim().replace(/^\uFEFF/, '').toLowerCase());
+  
+  return lines.slice(1)
+    .filter(l => l.trim())
+    .filter(l => {
+      const cleaned = l.replace(new RegExp(`[${sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s]`, 'g'), '');
+      return cleaned.length > 0;
+    })
+    .map(line => {
+      const cells = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') { inQ = !inQ; }
+        else if (line[i] === sep && !inQ) { cells.push(cur.trim()); cur = ''; }
+        else { cur += line[i]; }
+      }
+      cells.push(cur.trim());
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (cells[i] || '').replace(/^"|"$/g,'').replace(/""/g,'"'));
+      return obj;
+    })
+    .filter(obj => {
+      return Object.values(obj).some(v => v && String(v).trim());
+    });
+}
+
+// 🔧 PARSER DE DATAS ULTRA-ROBUSTO - aceita múltiplos formatos com desambiguação inteligente
+function parseDateFlex(s, referenceDate = null) {
+  if (!s) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  
+  // Formato 1: DD/MM/YYYY HH:MM:SS ou DD/MM/YYYY HH:MM (brasileiro completo)
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[\s,\t]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    let day = +m[1], month = +m[2], year = +m[3];
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return new Date(year, month-1, day, +m[4], +m[5], +(m[6]||0));
+    }
+  }
+  
+  // Formato 2: YYYY-MM-DDTHH:MM:SS (ISO completo)
+  let iso = s.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (iso) return new Date(+iso[1], +iso[2]-1, +iso[3], +iso[4], +iso[5], +(iso[6]||0));
+  
+  // Formato 3: YYYY-MM-DD (só data ISO)
+  let dt = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dt) return new Date(+dt[1], +dt[2]-1, +dt[3], 0, 0, 0);
+  
+  // Formato 4: DD/MM/YYYY (só data brasileira com ano de 4 dígitos)
+  let dtBR = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dtBR) {
+    let day = +dtBR[1], month = +dtBR[2], year = +dtBR[3];
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return new Date(year, month-1, day, 0, 0, 0);
+    }
+  }
+  
+  // Formato 5: Data abreviada com hora (M/D/YY H:MM ou D/M/YY H:MM) - AMBÍGUO
+  let shortDate = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})[\s,\t]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (shortDate) {
+    let a = +shortDate[1], b = +shortDate[2], year = +shortDate[3];
+    if (year < 100) year += 2000;
+    
+    let dateDMY = null, dateMDY = null;
+    try {
+      if (b >= 1 && b <= 12 && a >= 1 && a <= 31) {
+        dateDMY = new Date(year, b-1, a, +shortDate[4], +shortDate[5], +(shortDate[6]||0));
+        if (isNaN(dateDMY.getTime())) dateDMY = null;
+      }
+    } catch(e) {}
+    try {
+      if (a >= 1 && a <= 12 && b >= 1 && b <= 31) {
+        dateMDY = new Date(year, a-1, b, +shortDate[4], +shortDate[5], +(shortDate[6]||0));
+        if (isNaN(dateMDY.getTime())) dateMDY = null;
+      }
+    } catch(e) {}
+    
+    // Se tem data de referência, usar a mais próxima
+    if (referenceDate && dateDMY && dateMDY) {
+      let diffDMY = Math.abs(dateDMY - referenceDate);
+      let diffMDY = Math.abs(dateMDY - referenceDate);
+      return diffDMY < diffMDY ? dateDMY : dateMDY;
+    }
+    
+    // Se só uma é válida, usar ela
+    if (dateDMY && !dateMDY) return dateDMY;
+    if (dateMDY && !dateDMY) return dateMDY;
+    if (dateDMY) return dateDMY;
+  }
+  
+  // Formato 6: Data abreviada sem hora (M/D/YY ou D/M/YY) - AMBÍGUO
+  let shortDateOnly = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (shortDateOnly) {
+    let a = +shortDateOnly[1], b = +shortDateOnly[2], year = +shortDateOnly[3];
+    if (year < 100) year += 2000;
+    
+    let dateDMY = null, dateMDY = null;
+    try {
+      if (b >= 1 && b <= 12 && a >= 1 && a <= 31) {
+        dateDMY = new Date(year, b-1, a, 0, 0, 0);
+        if (isNaN(dateDMY.getTime())) dateDMY = null;
+      }
+    } catch(e) {}
+    try {
+      if (a >= 1 && a <= 12 && b >= 1 && b <= 31) {
+        dateMDY = new Date(year, a-1, b, 0, 0, 0);
+        if (isNaN(dateMDY.getTime())) dateMDY = null;
+      }
+    } catch(e) {}
+    
+    if (referenceDate && dateDMY && dateMDY) {
+      let diffDMY = Math.abs(dateDMY - referenceDate);
+      let diffMDY = Math.abs(dateMDY - referenceDate);
+      return diffDMY < diffMDY ? dateDMY : dateMDY;
+    }
+    
+    if (dateDMY && !dateMDY) return dateDMY;
+    if (dateMDY && !dateDMY) return dateMDY;
+    if (dateDMY) return dateDMY;
+  }
+  
+  return null;
+}
+
+function fmtH(h) {
+  if (h === null || h === undefined || isNaN(h)) return 'N/A';
+  if (h < 0) return 'N/A';
+  if (h < 0.017) return '< 1 min';
+  if (h < 1)  return `${Math.round(h*60)} min`;
+  if (h < 24) return `${h.toFixed(1)} h`;
+  return `${(h/24).toFixed(1)} dias`;
+}
+
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+
+function emailClass(h) {
+  if (h === null) return 't-none';
+  if (h < 0.5) return 't-fast';
+  if (h < 2)   return 't-ok';
+  if (h < 8)   return 't-slow';
+  return 't-late';
+}
+
+function mttrClass(h) {
+  if (h === null || h === undefined) return '';
+  if (h < 2) return 'mttr-fast';
+  if (h < 8) return 'mttr-ok';
+  if (h < 24) return 'mttr-slow';
+  return 'mttr-late';
+}
+
+// 🔧 EXTRAÇÃO DE IDs - # OBRIGATÓRIO (mais confiável)
+function extractIds(subject) {
+  if (!subject) return { alertIds: [], caseIds: [] };
+  
+  const matches = [...subject.matchAll(/#(\d+)\b/g)];
+  const alertIds = [], caseIds = [];
+  const seen = new Set();
+  
+  for (const m of matches) {
+    const n = m[1];
+    const num = parseInt(n);
+    
+    if (seen.has(num)) continue;
+    seen.add(num);
+    
+    // 5+ dígitos = ALERTA (ex: #331596, #348775)
+    // 1-4 dígitos = CASE (ex: #1681, #1733)
+    if (n.length >= 5) {
+      alertIds.push(num);
+    } else {
+      caseIds.push(num);
+    }
+  }
+  
+  return { alertIds, caseIds };
+}
+
+let emailAlertIdx = {}, emailCaseIdx = {};
+
+function buildEmailIndex() {
+  emailAlertIdx = {};
+  emailCaseIdx  = {};
+  
+  let processedCount = 0;
+  let skippedNoDate = 0;
+  let skippedNoIds = 0;
+  
+  for (const row of emails) {
+    const keys = Object.keys(row);
+    const dtKey = keys.find(k => k.match(/data|hora|date|time|datetime|evento/i)) || '';
+    const subjKey = keys.find(k => k.match(/assunto|subject|titulo|title/i)) || '';
+    
+    const dtRaw = dtKey ? row[dtKey] : '';
+    const subj = subjKey ? row[subjKey] : '';
+    const dt = parseDateFlex(dtRaw);
+    
+    if (!dt) { skippedNoDate++; continue; }
+    
+    const { alertIds, caseIds } = extractIds(subj);
+    
+    if (alertIds.length === 0 && caseIds.length === 0) {
+      skippedNoIds++;
+      continue;
+    }
+    
+    processedCount++;
+    
+    for (const id of alertIds) {
+      if (!emailAlertIdx[id] || dt < emailAlertIdx[id]) {
+        emailAlertIdx[id] = dt;
+      }
+    }
+    for (const id of caseIds) {
+      if (!emailCaseIdx[id] || dt < emailCaseIdx[id]) {
+        emailCaseIdx[id] = dt;
+      }
+    }
+  }
+  
+  // 🔍 DEBUG
+  console.group('📧 Diagnóstico de E-mails');
+  console.log(`✅ E-mails válidos: ${emails.length}`);
+  console.log(`✅ Processados com IDs: ${processedCount}`);
+  console.log(`⏭️  Pulados (sem data): ${skippedNoDate}`);
+  console.log(`⏭️  Pulados (sem IDs): ${skippedNoIds}`);
+  console.log(`🚨 Alertas únicos com e-mail: ${Object.keys(emailAlertIdx).length}`);
+  console.log(`💼 Cases únicos com e-mail: ${Object.keys(emailCaseIdx).length}`);
+  console.log(`📋 Sample alert IDs:`, Object.keys(emailAlertIdx).slice(0, 10));
+  console.log(`📋 Sample case IDs:`, Object.keys(emailCaseIdx).slice(0, 10));
+  
+  if (cases.length > 0) {
+    const sampleCaseIds = cases.slice(0, 10).map(c => c.case_id);
+    console.log(`📋 Sample case_id do CSV:`, sampleCaseIds);
+    const casesWithEmail = cases.filter(c => emailCaseIdx[parseInt(c.case_id)]).length;
+    const uniqueCases = new Set(cases.map(c => c.case_id)).size;
+    console.log(`✅ Cases do CSV com e-mail: ${casesWithEmail} de ${uniqueCases} únicos`);
+  }
+  console.groupEnd();
+  
+  const debugChip = document.getElementById('chip-debug');
+  if (debugChip) {
+    debugChip.style.display = 'inline-block';
+    debugChip.textContent = `🔍 ${Object.keys(emailAlertIdx).length}A · ${Object.keys(emailCaseIdx).length}C`;
+    debugChip.classList.add('loaded');
+  }
+}
+
+// 🔧 CORRIGIDO - passa referenceDate para desambiguar formatos
+function emailHoursAlert(row) {
+  const id = parseInt(row.alert_id);
+  const edt = emailAlertIdx[id];
+  const dateStr = row.available || row.created;
+  const cdt = parseDateFlex(dateStr, edt);
+  if (!edt || !cdt) return null;
+  return (edt - cdt) / 3600000;
+}
+
+// 🔧 CORRIGIDO - passa referenceDate para desambiguar formatos
+function emailHoursCase(row) {
+  const id = parseInt(row.case_id);
+  const edt = emailCaseIdx[id];
+  const dateStr = row.open_datetime || row.open_date;
+  const cdt = parseDateFlex(dateStr, edt);
+  if (!edt || !cdt) return null;
+  return (edt - cdt) / 3600000;
+}
+
+function hasHandoff(row) {
+  if (!row.atual_owner || !row.analista) return false;
+  return !usersMatch(row.analista, row.atual_owner);
+}
+
+function isFirstActor(row) {
+  return usersMatch(row.analista, row.first_by);
+}
+
+function hasEmail(row, isAlert) {
+  if (isAlert) {
+    return emailAlertIdx[parseInt(row.alert_id)] !== undefined;
+  } else {
+    return emailCaseIdx[parseInt(row.case_id)] !== undefined;
+  }
+}
+
+const ALERT_COLUMNS = [
+  { key: 'alert_id',    label: 'ID',              filterType: 'text' },
+  { key: 'analista',    label: 'Analista (atuou)', filterType: 'select' },
+  { key: 'atual_owner', label: 'Atual Owner',     filterType: 'select' },
+  { key: 'customer',    label: 'Cliente',         filterType: 'select' },
+  { key: 'available',   label: 'Disponível',      filterType: 'daterange' },
+  { key: 'title',       label: 'Título',          filterType: 'text' },
+  { key: 'severity',    label: 'Severidade',      filterType: 'select' },
+  { key: 'status',      label: 'Status',          filterType: 'select' },
+  { key: 'resolution',  label: 'Resolução',       filterType: 'select' },
+  { key: 'resp_fmt',    label: 'MTTA',            filterType: 'numrange' },
+  { key: 'mttr_fmt',    label: 'MTTR',            filterType: 'numrange' },
+  { key: 'email',       label: '✉ T.E-mail',      filterType: 'email' },
+];
+
+const CASE_COLUMNS = [
+  { key: 'case_id',        label: 'ID',              filterType: 'text' },
+  { key: 'analista',       label: 'Analista (atuou)', filterType: 'select' },
+  { key: 'atual_owner',    label: 'Atual Owner',     filterType: 'select' },
+  { key: 'customer',       label: 'Cliente',         filterType: 'select' },
+  { key: 'name',           label: 'Nome do Case',    filterType: 'text' },
+  { key: 'status',         label: 'Status',          filterType: 'select' },
+  { key: 'severity',       label: 'Severidade',      filterType: 'select' },
+  { key: 'open_datetime',  label: 'Abertura',        filterType: 'daterange' },
+  { key: 'close_datetime', label: 'Fechamento',      filterType: 'daterange' },
+  { key: 'mttr_fmt',       label: 'MTTR',            filterType: 'numrange' },
+  { key: 'resp_fmt',       label: 'T.Resposta',      filterType: 'numrange' },
+  { key: 'email',          label: '✉ T.E-mail',      filterType: 'email' },
+];
+
+function getCurrentColumns() {
+  return view === 'alertas' ? ALERT_COLUMNS : CASE_COLUMNS;
+}
+
+document.getElementById('files').onchange = async e => {
+  alertas = []; cases = []; emails = [];
+  let loadedA = false, loadedC = false, loadedE = false;
+
+  for (const f of e.target.files) {
+    const txt = await f.text();
+    if (f.name.toLowerCase().endsWith('_alertas.csv')) { alertas.push(...parseCSV(txt)); loadedA = true; }
+    else if (f.name.toLowerCase().endsWith('_cases.csv'))  { cases.push(...parseCSV(txt));  loadedC = true; }
+    else if (f.name.toLowerCase() === 'emails.csv')        { emails.push(...parseCSV(txt));  loadedE = true; }
+  }
+
+  setChip('chip-alerts', loadedA, `alerts: ${alertas.length}`);
+  setChip('chip-cases',   loadedC, `cases: ${cases.length}`);
+  setChip('chip-emails',  loadedE, `emails: ${emails.length}`);
+
+  buildEmailIndex();
+  init();
+};
+
+function setChip(id, ok, label) {
+  const el = document.getElementById(id);
+  el.textContent = label;
+  el.className = 'chip' + (ok ? ' loaded' : '');
+}
+
+function init() {
+  populateSelects();
+  updateAll();
+  document.getElementById('last-update').textContent =
+    'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+}
+
+function updateAll() {
+  updatePeriod();
+  updateKPIs();
+  updateAnalystBars();
+  updateSevBars();
+  updateEmailPanel();
+  render();
+  updateModeIndicator();
+  updateActiveColumnFiltersDisplay();
+}
+
+function updateModeIndicator() {
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  const badge = document.getElementById('mode-badge');
+  const hint = document.getElementById('analyst-mode-hint');
+  if (onlyFirst) {
+    badge.className = 'mode-badge strict';
+    badge.textContent = '📊 MODO PRODUTIVIDADE';
+    hint.textContent = '(contando apenas quem agiu primeiro)';
+  } else {
+    badge.className = 'mode-badge total';
+    badge.textContent = '🤝 MODO ESFORÇO TOTAL';
+    hint.textContent = '(incluindo hand-offs / colaboradores)';
+  }
+}
+
+function populateSelects() {
+  const analysts  = [...new Set([...alertas, ...cases].map(x => x.analista).filter(Boolean))].sort();
+  const customers = [...new Set([...alertas, ...cases].map(x => x.customer).filter(Boolean))].sort();
+  fillSelect('sel-analyst',  analysts,  document.getElementById('sel-analyst').value);
+  fillSelect('sel-customer', customers, document.getElementById('sel-customer').value);
+}
+
+function fillSelect(id, opts, cur) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<option value="">Todos</option>' +
+    opts.map(o => `<option${o===cur?' selected':''}>${o}</option>`).join('');
+}
+
+function getFilters() {
+  return {
+    analyst:  document.getElementById('sel-analyst').value,
+    customer: document.getElementById('sel-customer').value,
+    sev:      document.getElementById('sel-sev').value,
+    email:    document.getElementById('sel-email').value,
+    handoff:  document.getElementById('sel-handoff').value,
+    dtFrom:   document.getElementById('dt-from').value,
+    dtTo:     document.getElementById('dt-to').value,
+    q:        document.getElementById('search').value.toLowerCase(),
+  };
+}
+
+function passesFilter(row, f, isAlert) {
+  const dateField = isAlert ? (row.available || row.created || '') : (row.open_datetime || row.open_date || '');
+  const d = dateField.substring(0, 10);
+  if (f.analyst  && row.analista !== f.analyst)   return false;
+  if (f.customer && row.customer  !== f.customer) return false;
+  if (f.sev      && (row.severity||'').toLowerCase() !== f.sev) return false;
+  if (f.dtFrom   && d < f.dtFrom) return false;
+  if (f.dtTo     && d > f.dtTo)   return false;
+  if (f.email) {
+    const hasEmail_ = hasEmail(row, isAlert);
+    if (f.email === 'yes' && !hasEmail_) return false;
+    if (f.email === 'no'  &&  hasEmail_) return false;
+  }
+  if (f.handoff) {
+    const ho = hasHandoff(row);
+    if (f.handoff === 'yes' && !ho) return false;
+    if (f.handoff === 'no'  &&  ho) return false;
+  }
+  if (f.q && !JSON.stringify(row).toLowerCase().includes(f.q)) return false;
+  return true;
+}
+
+function passesColumnFilters(row, isAlert) {
+  for (const colKey in columnFilters) {
+    const filter = columnFilters[colKey];
+    const value = row[colKey] || '';
+    
+    if (filter.type === 'select' && filter.values && filter.values.length > 0) {
+      if (!filter.values.includes(value)) return false;
+    }
+    else if (filter.type === 'text' && filter.text && filter.text.trim()) {
+      if (!String(value).toLowerCase().includes(filter.text.toLowerCase())) return false;
+    }
+    else if (filter.type === 'daterange') {
+      const rowDate = parseDateFlex(value);
+      if (filter.from) {
+        const fromDate = parseDateFlex(filter.from);
+        if (rowDate && fromDate && rowDate < fromDate) return false;
+      }
+      if (filter.to) {
+        const toDate = parseDateFlex(filter.to);
+        if (rowDate && toDate && rowDate > toDate) return false;
+      }
+    }
+    else if (filter.type === 'numrange') {
+      let numField = colKey;
+      if (colKey === 'resp_fmt') numField = 'resp_h';
+      else if (colKey === 'mttr_fmt') numField = 'mttr_h';
+      
+      const numVal = parseFloat(row[numField]);
+      if (isNaN(numVal)) {
+        if (filter.from !== '' || filter.to !== '') return false;
+      } else {
+        if (filter.from !== '' && filter.from !== null) {
+          if (numVal < parseFloat(filter.from)) return false;
+        }
+        if (filter.to !== '' && filter.to !== null) {
+          if (numVal > parseFloat(filter.to)) return false;
+        }
+      }
+    }
+    else if (filter.type === 'email') {
+      const rowHasEmail = hasEmail(row, isAlert);
+      if (filter.value === 'yes' && !rowHasEmail) return false;
+      if (filter.value === 'no' && rowHasEmail) return false;
+    }
+  }
+  return true;
+}
+
+function updatePeriod() {
+  const f = getFilters();
+  if (f.dtFrom || f.dtTo) {
+    document.getElementById('period-display').textContent =
+      `📅 ${(f.dtFrom||'?').split('-').reverse().join('/')} → ${(f.dtTo||'?').split('-').reverse().join('/')}`;
+    return;
+  }
+  const dates = [
+    ...alertas.map(x => (x.available || x.created || '').substring(0,10)),
+    ...cases.map(x => (x.open_datetime || x.open_date || '').substring(0,10)),
+  ].filter(Boolean).sort();
+  if (dates.length) {
+    document.getElementById('period-display').textContent =
+      `📅 ${dates[0].split('-').reverse().join('/')} → ${dates[dates.length-1].split('-').reverse().join('/')}`;
+  }
+}
+
+function updateKPIs() {
+  const f = getFilters();
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  
+  const fa = alertas.filter(x => passesFilter(x, f, true) && passesColumnFilters(x, true))
+                    .filter(x => !onlyFirst || isFirstActor(x));
+  const fc = cases.filter(x => passesFilter(x, f, false) && passesColumnFilters(x, false))
+                  .filter(x => !onlyFirst || isFirstActor(x));
+
+  const uniqueAlerts = new Set(fa.map(x => x.alert_id)).size;
+  const uniqueCases  = new Set(fc.map(x => x.case_id)).size;
+  const closed = fc.filter(x => x.status === 'Fechado');
+  const uniqueClosed = new Set(closed.map(x => x.case_id)).size;
+  const fp = fa.filter(x => x.resolution === 'False Positive');
+  const uniqueFp = new Set(fp.map(x => x.alert_id)).size;
+
+  const emailTimesA = fa.map(emailHoursAlert).filter(h => h !== null && h >= 0);
+  const emailTimesC = fc.map(emailHoursCase).filter(h => h !== null && h >= -0.17);
+  
+  console.log('🔍 DEBUG updateKPIs:');
+  console.log(`  Cases após filtros: ${fc.length}`);
+  console.log(`  emailTimesA (válidos): ${emailTimesA.length}`);
+  console.log(`  emailTimesC (válidos): ${emailTimesC.length}`);
+  if (emailTimesC.length > 0) {
+    console.log(`  Sample emailTimesC:`, emailTimesC.slice(0, 10));
+  }
+  
+  const avgEmailA = avg(emailTimesA);
+  const avgEmailC = avg(emailTimesC);
+  
+  const matchedA = new Set(fa.filter(x => emailAlertIdx[parseInt(x.alert_id)]).map(x => x.alert_id)).size;
+  const matchedC = new Set(fc.filter(x => emailCaseIdx[parseInt(x.case_id)]).map(x => x.case_id)).size;
+
+  const faAll = alertas.filter(x => passesFilter(x, f, true) && passesColumnFilters(x, true));
+  const fcAll = cases.filter(x => passesFilter(x, f, false) && passesColumnFilters(x, false));
+  const uniqueAlertsAll = new Set(faAll.map(x => x.alert_id)).size;
+  const uniqueCasesAll  = new Set(fcAll.map(x => x.case_id)).size;
+  const handoffAlerts = faAll.length - uniqueAlertsAll;
+  const handoffCases  = fcAll.length - uniqueCasesAll;
+
+  setText('k-alerts-unique', uniqueAlerts.toLocaleString('pt-BR'));
+  if (onlyFirst) {
+    setText('k-alerts-entries', 
+      `${uniqueAlerts} registros` + 
+      (handoffAlerts > 0 ? ` · ${handoffAlerts} hand-offs ignorados` : ''));
+  } else {
+    setText('k-alerts-entries', 
+      `${faAll.length} entradas (${handoffAlerts} hand-offs)`);
+  }
+
+  setText('k-cases-unique', uniqueCases.toLocaleString('pt-BR'));
+  if (onlyFirst) {
+    setText('k-cases-entries', 
+      `${uniqueCases} registros` + 
+      (handoffCases > 0 ? ` · ${handoffCases} hand-offs ignorados` : ''));
+  } else {
+    setText('k-cases-entries', 
+      `${fcAll.length} entradas (${handoffCases} hand-offs)`);
+  }
+
+  setText('k-closed', uniqueClosed);
+  setText('k-open', uniqueCases - uniqueClosed);
+  setText('k-fp', uniqueFp);
+  setText('k-fp-rate', uniqueAlerts > 0 ? `${((uniqueFp/uniqueAlerts)*100).toFixed(1)}% dos alertas` : '');
+  setText('k-emails', emails.length);
+  setText('k-emails-match', `${matchedA} alertas · ${matchedC} cases vinculados`);
+  setText('k-email-avg-a', fmtH(avgEmailA));
+  setText('k-email-avg-c', fmtH(avgEmailC));
+}
+
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+function updateAnalystBars() {
+  const f = getFilters();
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  
+  const stats = {};
+  alertas.filter(x => passesFilter(x, f, true) && passesColumnFilters(x, true)).forEach(x => {
+    if (onlyFirst && !isFirstActor(x)) return;
+    const n = x.analista || '—';
+    if (!stats[n]) stats[n] = {a:0,ct:0,cc:0};
+    stats[n].a++;
+  });
+  
+  cases.filter(x => passesFilter(x, f, false) && passesColumnFilters(x, false)).forEach(x => {
+    if (onlyFirst && !isFirstActor(x)) return;
+    const n = x.analista || '—';
+    if (!stats[n]) stats[n] = {a:0,ct:0,cc:0};
+    stats[n].ct++;
+    if (x.status === 'Fechado') stats[n].cc++;
+  });
+  
+  const arr = Object.entries(stats).sort((a,b) => (b[1].a+b[1].ct)-(a[1].a+a[1].ct));
+  if (!arr.length) { 
+    document.getElementById('analyst-bars').innerHTML = '<div class="empty">Sem dados</div>'; 
+    return; 
+  }
+  const maxA = Math.max(...arr.map(s=>s[1].a), 1);
+  const maxC = Math.max(...arr.map(s=>s[1].ct), 1);
+  const selA = document.getElementById('sel-analyst').value;
+  
+  document.getElementById('analyst-bars').innerHTML = arr.map(([n,s]) => {
+    const hl = selA && n === selA ? 'border:1px solid var(--accent);border-radius:8px;padding:2px 6px;' : '';
+    const cpct = s.ct > 0 ? (s.cc/s.ct*100) : 0;
+    return `<div class="an-row" style="${hl}">
+      <div class="an-info">
+        <span class="an-name">${selA===n?'🎯 ':''}${n}</span>
+        <span class="an-stats">${s.a} alertas · ${s.ct} cases (${s.cc} fechados)</span>
+      </div>
+      <div class="bar-track" style="margin-bottom:4px">
+        <div class="bar-a" style="width:${s.a/maxA*100}%"></div>
+      </div>
+      <div class="bar-track">
+        <div class="bar-c" style="width:${s.ct/maxC*100}%">
+          <div class="bar-cc" style="width:${cpct}%"></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateSevBars() {
+  const f = getFilters();
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  
+  let data;
+  if (view === 'alertas') {
+    data = alertas.filter(x => passesFilter(x, f, true) && passesColumnFilters(x, true))
+                  .filter(x => !onlyFirst || isFirstActor(x));
+  } else {
+    data = cases.filter(x => passesFilter(x, f, false) && passesColumnFilters(x, false))
+                .filter(x => !onlyFirst || isFirstActor(x));
+  }
+  
+  const sevs = {critical:0, high:0, medium:0, low:0, unknown:0};
+  data.forEach(x => { const s = (x.severity||'unknown').toLowerCase(); sevs[s] = (sevs[s]||0)+1; });
+  const total = data.length || 1;
+  const colors = {critical:'var(--red)',high:'var(--yellow)',medium:'var(--accent)',low:'var(--muted2)',unknown:'var(--muted)'};
+  const labels = {critical:'🔴 Critical',high:'🟠 High',medium:'🔵 Medium',low:'⚪ Low',unknown:'⚫ Unknown'};
+  document.getElementById('sev-bars').innerHTML = Object.entries(sevs).map(([k,v]) => `
+    <div class="sev-row">
+      <div class="sev-info"><span>${labels[k]}</span><span>${v} (${(v/total*100).toFixed(1)}%)</span></div>
+      <div class="bar-track" style="height:5px">
+        <div class="sev-bar" style="width:${v/total*100}%;background:${colors[k]}"></div>
+      </div>
+    </div>`).join('');
+}
+
+function updateEmailPanel() {
+  if (!emails.length) {
+    document.getElementById('email-analyst-kpis').innerHTML =
+      '<div class="empty" style="padding:16px">Carregue o <strong>emails.csv</strong> para ver esta análise.</div>';
+    document.getElementById('email-analyst-bars').innerHTML = '';
+    return;
+  }
+
+  const f = getFilters();
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  const byAnalyst = {};
+
+  alertas.filter(x => passesFilter(x, f, true) && passesColumnFilters(x, true)).forEach(x => {
+    if (onlyFirst && !isFirstActor(x)) return;
+    const n = x.analista || '—';
+    if (!byAnalyst[n]) byAnalyst[n] = {timesA:[], timesC:[], matchA:0, matchC:0, totalA:0, totalC:0};
+    byAnalyst[n].totalA++;
+    const h = emailHoursAlert(x);
+    if (h !== null && h >= 0) { byAnalyst[n].timesA.push(h); byAnalyst[n].matchA++; }
+  });
+
+  cases.filter(x => passesFilter(x, f, false) && passesColumnFilters(x, false)).forEach(x => {
+    if (onlyFirst && !isFirstActor(x)) return;
+    const n = x.analista || '—';
+    if (!byAnalyst[n]) byAnalyst[n] = {timesA:[], timesC:[], matchA:0, matchC:0, totalA:0, totalC:0};
+    byAnalyst[n].totalC++;
+    const h = emailHoursCase(x);
+    if (h !== null && h >= -0.17) { byAnalyst[n].timesC.push(Math.max(0, h)); byAnalyst[n].matchC++; }
+  });
+
+  const arr = Object.entries(byAnalyst).sort((a,b)=>(b[1].matchA+b[1].matchC)-(a[1].matchA+a[1].matchC));
+  if (!arr.length) {
+    document.getElementById('email-analyst-kpis').innerHTML = '<div class="empty">Sem cruzamentos encontrados.</div>';
+    return;
+  }
+
+  document.getElementById('email-analyst-kpis').innerHTML = arr.map(([n, s]) => {
+    const avgA = avg(s.timesA), avgC = avg(s.timesC);
+    return `<div class="email-kpi">
+      <div class="email-kpi-label">👤 ${n}</div>
+      <div style="font-size:12px;color:var(--muted2);margin-bottom:6px">
+        ✉ ${s.matchA} alertas · ${s.matchC} cases
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">T.E-MAIL ALERTA</div>
+          <span class="${emailClass(avgA)}" style="font-size:15px">${fmtH(avgA)}</span>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">T.E-MAIL CASE</div>
+          <span class="${emailClass(avgC)}" style="font-size:15px">${fmtH(avgC)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const allAvgs = arr.map(([,s]) => avg(s.timesA)||0);
+  const maxAvg  = Math.max(...allAvgs, 0.001);
+  document.getElementById('email-analyst-bars').innerHTML = `
+    <div style="margin-top:14px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+        Tempo médio até e-mail de alerta por analista
+      </div>
+      ${arr.map(([n,s]) => {
+        const a = avg(s.timesA);
+        if (a === null) return '';
+        const pct = a/maxAvg*100;
+        const cls = emailClass(a);
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span style="color:var(--text)">${n}</span>
+            <span class="${cls}">${fmtH(a)}</span>
+          </div>
+          <div class="bar-track">
+            <div style="width:${pct}%;height:100%;border-radius:4px;
+              background:${a<0.5?'var(--green)':a<2?'var(--accent2)':a<8?'var(--yellow)':'var(--red)'};
+              transition:width .4s"></div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="legend" style="margin-top:8px">
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--green)"></div>< 30 min</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--accent2)"></div>< 2h</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--yellow)"></div>< 8h</div>
+        <div style="display:flex;align-items:center;gap:5px"><div class="leg-dot" style="background:var(--red)"></div>> 8h</div>
+      </div>
+    </div>`;
+}
+
+function setView(v) {
+  view = v;
+  columnFilters = {};
+  sort.key = v === 'alertas' ? 'available' : 'open_datetime';
+  sort.dir = 'desc';
+  document.getElementById('tab-alerts').className = 'view-tab' + (v==='alertas'?' active':'');
+  document.getElementById('tab-cases').className  = 'view-tab' + (v==='cases'?' active':'');
+  updateAll();
+}
+
+function handleSort(k) {
+  sort.dir = sort.key===k && sort.dir==='desc' ? 'asc' : 'desc';
+  sort.key = k;
+  render();
+}
+function ind(k) { return sort.key===k ? `<span class="sort-ind">${sort.dir==='asc'?'▲':'▼'}</span>` : ''; }
+
+function openColumnFilterDropdown(colKey, thElement, event) {
+  event.stopPropagation();
+  closeColumnFilterDropdown();
+  
+  const col = getCurrentColumns().find(c => c.key === colKey);
+  if (!col || col.filterType === 'none') return;
+  
+  const dropdown = document.createElement('div');
+  dropdown.className = 'col-filter-dropdown';
+  dropdown.id = 'col-filter-dropdown';
+  
+  const rect = thElement.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.top = (rect.bottom + 4) + 'px';
+  dropdown.style.left = Math.max(10, Math.min(rect.left, window.innerWidth - 330)) + 'px';
+  
+  if (col.filterType === 'select') {
+    dropdown.innerHTML = buildSelectFilter(colKey, col.label);
+  } else if (col.filterType === 'text') {
+    dropdown.innerHTML = buildTextFilter(colKey, col.label);
+  } else if (col.filterType === 'daterange') {
+    dropdown.innerHTML = buildDateRangeFilter(colKey, col.label);
+  } else if (col.filterType === 'numrange') {
+    dropdown.innerHTML = buildNumRangeFilter(colKey, col.label);
+  } else if (col.filterType === 'email') {
+    dropdown.innerHTML = buildEmailFilter(colKey, col.label);
+  }
+  
+  document.body.appendChild(dropdown);
+  openDropdown = dropdown;
+  
+  setTimeout(() => {
+    const firstInput = dropdown.querySelector('input');
+    if (firstInput) firstInput.focus();
+  }, 50);
+  
+  if (col.filterType === 'select') {
+    setupSelectFilterEvents(colKey);
+  } else if (col.filterType === 'email') {
+    setupEmailFilterEvents(colKey);
+  }
+}
+
+function buildSelectFilter(colKey, label) {
+  const f = getFilters();
+  const isAlert = view === 'alertas';
+  const baseData = (isAlert ? alertas : cases).filter(x => passesFilter(x, f, isAlert));
+  
+  const valueCounts = {};
+  baseData.forEach(row => {
+    const v = row[colKey] || '(vazio)';
+    valueCounts[v] = (valueCounts[v] || 0) + 1;
+  });
+  
+  const sortedValues = Object.keys(valueCounts).sort();
+  const currentFilter = columnFilters[colKey];
+  const currentValues = currentFilter?.values || [];
+  
+  let html = `
+    <div class="cf-title">🔽 Filtrar: ${label}</div>
+    <div class="cf-search">
+      <input type="text" id="cf-search-${colKey}" placeholder="🔍 Buscar valor...">
+    </div>
+    <label class="cf-select-all">
+      <input type="checkbox" id="cf-select-all-${colKey}" ${currentValues.length === 0 ? 'checked' : ''}>
+      Selecionar todos
+    </label>
+    <div class="cf-checkbox-list" id="cf-list-${colKey}">
+  `;
+  
+  sortedValues.forEach(v => {
+    const checked = currentValues.length === 0 || currentValues.includes(v);
+    const safeVal = String(v).replace(/"/g, '&quot;');
+    html += `
+      <label class="cf-checkbox-item" data-value="${safeVal}">
+        <input type="checkbox" class="cf-checkbox" value="${safeVal}" ${checked ? 'checked' : ''}>
+        <span class="cf-label" title="${safeVal}">${safeVal}</span>
+        <span class="cf-count">${valueCounts[v]}</span>
+      </label>
+    `;
+  });
+  
+  html += `
+    </div>
+    <div class="cf-actions">
+      <button class="cf-btn clear" onclick="clearColumnFilter('${colKey}')">Limpar</button>
+      <button class="cf-btn apply" onclick="applySelectFilter('${colKey}')">Aplicar</button>
+    </div>
+  `;
+  
+  return html;
+}
+
+function buildTextFilter(colKey, label) {
+  const currentText = columnFilters[colKey]?.text || '';
+  return `
+    <div class="cf-title">🔍 Filtrar: ${label}</div>
+    <input type="text" id="cf-text-${colKey}" value="${currentText.replace(/"/g, '&quot;')}" 
+           placeholder="Digite para filtrar...">
+    <div class="hint">Busca case-insensitive em qualquer parte do texto</div>
+    <div class="cf-actions">
+      <button class="cf-btn clear" onclick="clearColumnFilter('${colKey}')">Limpar</button>
+      <button class="cf-btn apply" onclick="applyTextFilter('${colKey}')">Aplicar</button>
+    </div>
+  `;
+}
+
+function buildDateRangeFilter(colKey, label) {
+  const current = columnFilters[colKey] || {};
+  return `
+    <div class="cf-title">📅 Filtrar: ${label}</div>
+    <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:2px">De:</label>
+    <input type="date" id="cf-from-${colKey}" value="${current.from || ''}" style="color-scheme:dark">
+    <label style="font-size:10px;color:var(--muted);display:block;margin:6px 0 2px">Até:</label>
+    <input type="date" id="cf-to-${colKey}" value="${current.to || ''}" style="color-scheme:dark">
+    <div class="cf-actions">
+      <button class="cf-btn clear" onclick="clearColumnFilter('${colKey}')">Limpar</button>
+      <button class="cf-btn apply" onclick="applyDateRangeFilter('${colKey}')">Aplicar</button>
+    </div>
+  `;
+}
+
+function buildNumRangeFilter(colKey, label) {
+  const current = columnFilters[colKey] || {};
+  const hint = (colKey === 'resp_fmt' || colKey === 'mttr_fmt') 
+    ? 'Valores em horas (ex: 0.5 = 30 min, 24 = 1 dia)'
+    : 'Valores numéricos';
+  return `
+    <div class="cf-title">🔢 Filtrar: ${label}</div>
+    <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:2px">Mínimo:</label>
+    <input type="text" id="cf-from-${colKey}" value="${current.from || ''}" placeholder="ex: 0">
+    <label style="font-size:10px;color:var(--muted);display:block;margin:6px 0 2px">Máximo:</label>
+    <input type="text" id="cf-to-${colKey}" value="${current.to || ''}" placeholder="ex: 24">
+    <div class="hint">${hint}</div>
+    <div class="cf-actions">
+      <button class="cf-btn clear" onclick="clearColumnFilter('${colKey}')">Limpar</button>
+      <button class="cf-btn apply" onclick="applyNumRangeFilter('${colKey}')">Aplicar</button>
+    </div>
+  `;
+}
+
+function buildEmailFilter(colKey, label) {
+  const f = getFilters();
+  const isAlert = view === 'alertas';
+  const baseData = (isAlert ? alertas : cases).filter(x => passesFilter(x, f, isAlert));
+  
+  let withEmail = 0, withoutEmail = 0;
+  baseData.forEach(row => {
+    if (hasEmail(row, isAlert)) withEmail++;
+    else withoutEmail++;
+  });
+  
+  const currentValue = columnFilters[colKey]?.value || '';
+  
+  return `
+    <div class="cf-title">✉ Filtrar: ${label}</div>
+    <div class="cf-radio-group" id="cf-radio-${colKey}">
+      <label class="cf-radio-item ${currentValue === '' ? 'selected' : ''}">
+        <input type="radio" name="cf-email-${colKey}" value="" ${currentValue === '' ? 'checked' : ''}>
+        <span class="cf-radio-label">📋 Todos</span>
+        <span class="cf-radio-count">${baseData.length}</span>
+      </label>
+      <label class="cf-radio-item ${currentValue === 'yes' ? 'selected' : ''}">
+        <input type="radio" name="cf-email-${colKey}" value="yes" ${currentValue === 'yes' ? 'checked' : ''}>
+        <span class="cf-radio-label">✅ Com e-mail</span>
+        <span class="cf-radio-count">${withEmail}</span>
+      </label>
+      <label class="cf-radio-item ${currentValue === 'no' ? 'selected' : ''}">
+        <input type="radio" name="cf-email-${colKey}" value="no" ${currentValue === 'no' ? 'checked' : ''}>
+        <span class="cf-radio-label">❌ Sem e-mail</span>
+        <span class="cf-radio-count">${withoutEmail}</span>
+      </label>
+    </div>
+    <div class="hint">Baseado no cruzamento com o arquivo emails.csv</div>
+    <div class="cf-actions">
+      <button class="cf-btn clear" onclick="clearColumnFilter('${colKey}')">Limpar</button>
+      <button class="cf-btn apply" onclick="applyEmailFilter('${colKey}')">Aplicar</button>
+    </div>
+  `;
+}
+
+function setupSelectFilterEvents(colKey) {
+  const searchInput = document.getElementById(`cf-search-${colKey}`);
+  const selectAll = document.getElementById(`cf-select-all-${colKey}`);
+  const list = document.getElementById(`cf-list-${colKey}`);
+  
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      list.querySelectorAll('.cf-checkbox-item').forEach(item => {
+        const val = item.dataset.value.toLowerCase();
+        item.style.display = val.includes(q) ? '' : 'none';
+      });
+    });
+  }
+  
+  if (selectAll) {
+    selectAll.addEventListener('change', (e) => {
+      list.querySelectorAll('.cf-checkbox').forEach(cb => {
+        if (cb.closest('.cf-checkbox-item').style.display !== 'none') {
+          cb.checked = e.target.checked;
+        }
+      });
+    });
+  }
+}
+
+function setupEmailFilterEvents(colKey) {
+  const radios = document.querySelectorAll(`input[name="cf-email-${colKey}"]`);
+  radios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      document.querySelectorAll(`#cf-radio-${colKey} .cf-radio-item`).forEach(item => {
+        item.classList.remove('selected');
+      });
+      e.target.closest('.cf-radio-item').classList.add('selected');
+    });
+  });
+}
+
+function applySelectFilter(colKey) {
+  const checkboxes = document.querySelectorAll(`#cf-list-${colKey} .cf-checkbox:checked`);
+  const allCheckboxes = document.querySelectorAll(`#cf-list-${colKey} .cf-checkbox`);
+  
+  if (checkboxes.length === 0 || checkboxes.length === allCheckboxes.length) {
+    delete columnFilters[colKey];
+  } else {
+    columnFilters[colKey] = {
+      type: 'select',
+      values: Array.from(checkboxes).map(cb => cb.value)
+    };
+  }
+  
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function applyTextFilter(colKey) {
+  const text = document.getElementById(`cf-text-${colKey}`).value;
+  if (text && text.trim()) {
+    columnFilters[colKey] = { type: 'text', text: text.trim() };
+  } else {
+    delete columnFilters[colKey];
+  }
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function applyDateRangeFilter(colKey) {
+  const from = document.getElementById(`cf-from-${colKey}`).value;
+  const to = document.getElementById(`cf-to-${colKey}`).value;
+  if (from || to) {
+    columnFilters[colKey] = { type: 'daterange', from, to };
+  } else {
+    delete columnFilters[colKey];
+  }
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function applyNumRangeFilter(colKey) {
+  const from = document.getElementById(`cf-from-${colKey}`).value;
+  const to = document.getElementById(`cf-to-${colKey}`).value;
+  if (from || to) {
+    columnFilters[colKey] = { type: 'numrange', from, to };
+  } else {
+    delete columnFilters[colKey];
+  }
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function applyEmailFilter(colKey) {
+  const selected = document.querySelector(`input[name="cf-email-${colKey}"]:checked`);
+  const value = selected ? selected.value : '';
+  if (value && value !== '') {
+    columnFilters[colKey] = { type: 'email', value: value };
+  } else {
+    delete columnFilters[colKey];
+  }
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function clearColumnFilter(colKey) {
+  delete columnFilters[colKey];
+  closeColumnFilterDropdown();
+  updateAll();
+}
+
+function clearAllColumnFilters() {
+  columnFilters = {};
+  updateAll();
+}
+
+function closeColumnFilterDropdown() {
+  if (openDropdown) {
+    openDropdown.remove();
+    openDropdown = null;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (openDropdown && !openDropdown.contains(e.target) && !e.target.closest('th')) {
+    closeColumnFilterDropdown();
+  }
+});
+
+function updateActiveColumnFiltersDisplay() {
+  const container = document.getElementById('active-col-filters');
+  const btnClear = document.getElementById('btn-clear-col-filters');
+  const keys = Object.keys(columnFilters);
+  
+  if (keys.length === 0) {
+    container.innerHTML = '';
+    btnClear.style.display = 'none';
+    return;
+  }
+  
+  btnClear.style.display = 'inline-block';
+  const cols = getCurrentColumns();
+  container.innerHTML = keys.map(k => {
+    const col = cols.find(c => c.key === k);
+    const label = col ? col.label : k;
+    const f = columnFilters[k];
+    let detail = '';
+    if (f.type === 'select') detail = ` (${f.values.length})`;
+    else if (f.type === 'text') detail = `: "${f.text}"`;
+    else if (f.type === 'daterange') {
+      const parts = [];
+      if (f.from) parts.push(f.from);
+      if (f.to) parts.push(f.to);
+      detail = `: ${parts.join(' → ')}`;
+    }
+    else if (f.type === 'numrange') {
+      const parts = [];
+      if (f.from) parts.push(`≥${f.from}h`);
+      if (f.to) parts.push(`≤${f.to}h`);
+      detail = `: ${parts.join(' ')}`;
+    }
+    else if (f.type === 'email') {
+      detail = f.value === 'yes' ? ': ✅ Com e-mail' : ': ❌ Sem e-mail';
+    }
+    return `<span class="col-filter-chip" onclick="clearColumnFilter('${k}')" title="Clique para remover">${label}${detail} ✕</span>`;
+  }).join('');
+}
+
+function render() {
+  const f = getFilters();
+  const isAlert = view === 'alertas';
+  const cols = getCurrentColumns();
+  
+  let data = (isAlert ? alertas : cases).filter(x => passesFilter(x, f, isAlert) && passesColumnFilters(x, isAlert));
+
+  const k = sort.key, dir = sort.dir==='asc'?1:-1;
+  data.sort((a,b) => {
+    const av = a[k]||'', bv = b[k]||'';
+    if (k==='alert_id'||k==='case_id') return (parseInt(av)-parseInt(bv))*dir;
+    if (k === 'resp_fmt' || k === 'mttr_fmt') {
+      const numField = k === 'resp_fmt' ? 'resp_h' : 'mttr_h';
+      const na = parseFloat(a[numField]), nb = parseFloat(b[numField]);
+      if (!isNaN(na) && !isNaN(nb)) return (na - nb) * dir;
+      if (!isNaN(na)) return -1 * dir;
+      if (!isNaN(nb)) return 1 * dir;
+    }
+    if (k === 'mttr_h') {
+      const na = parseFloat(av), nb = parseFloat(bv);
+      if (!isNaN(na) && !isNaN(nb)) return (na - nb) * dir;
+    }
+    return av.localeCompare(bv, undefined, {numeric:true})*dir;
+  });
+
+  document.getElementById('row-count').textContent = `${data.length} ${view}`;
+
+  if (!data.length) {
+    document.getElementById('t-head').innerHTML = '';
+    document.getElementById('t-body').innerHTML = `<tr><td class="empty" colspan="${cols.length}">Nenhum registro encontrado.</td></tr>`;
+    return;
+  }
+
+  const theadHtml = '<tr>' + cols.map(col => {
+    const isFiltered = !!columnFilters[col.key];
+    const canFilter = col.filterType !== 'none';
+    return `<th class="${isFiltered ? 'filtered' : ''}" onclick="handleSort('${col.key}')">
+      <span class="th-content">
+        ${col.label} ${ind(col.key)}
+        ${canFilter ? `<span class="filter-icon" onclick="openColumnFilterDropdown('${col.key}', this.parentElement.parentElement, event)" title="Filtrar por ${col.label}">🔽</span>` : ''}
+      </span>
+    </th>`;
+  }).join('') + '</tr>';
+  
+  document.getElementById('t-head').innerHTML = theadHtml;
+
+  if (isAlert) {
+    document.getElementById('t-body').innerHTML = data.map(x => {
+      const eh = emailHoursAlert(x);
+      const edt = emailAlertIdx[parseInt(x.alert_id)];
+      const ho = hasHandoff(x);
+      const first = isFirstActor(x);
+      const dispDate = (x.available || x.created || '').replace('T', ' ');
+      
+      const mttaVal = parseFloat(x.resp_h);
+      const mttrVal = parseFloat(x.mttr_h);
+      const mttaClass = !isNaN(mttaVal) ? mttrClass(mttaVal) : 'na-value';
+      const mttrClass_ = !isNaN(mttrVal) ? mttrClass(mttrVal) : 'na-value';
+      
+      return `<tr class="${ho ? 'handoff' : ''}">
+        <td><code style="color:var(--muted2)">#${x.alert_id}</code></td>
+        <td style="color:var(--accent2)">
+          👤 ${x.analista||'—'}
+          ${first ? '<span style="color:var(--green);font-size:10px;margin-left:4px">★ 1º</span>' : ''}
+        </td>
+        <td>
+          ${x.atual_owner && x.atual_owner !== x.analista
+            ? `<span style="color:var(--purple)">🔄 ${x.atual_owner}</span> <span class="badge handoff">HAND-OFF</span>`
+            : (x.atual_owner ? `<span style="color:var(--muted2)">${x.atual_owner}</span>` : '—')}
+        </td>
+        <td>🏢 ${x.customer||'—'}</td>
+        <td style="color:var(--muted2);font-size:12px">${dispDate}</td>
+        <td class="wrap">${x.title||''}</td>
+        <td><span class="badge ${(x.severity||'unknown').toLowerCase()}">${x.severity||'?'}</span></td>
+        <td><span class="badge ${(x.status||'').toLowerCase()}">${x.status||'?'}</span></td>
+        <td><span style="font-size:12px;color:var(--muted2)">${x.resolution||'—'}</span></td>
+        <td class="${mttaClass}">⏱ ${x.resp_fmt||'—'}</td>
+        <td class="${mttrClass_}">⏱ ${x.mttr_fmt || '<span class="na-value">—</span>'}</td>
+        <td>
+          <span class="${emailClass(eh)}" title="${edt?edt.toLocaleString('pt-BR'):'Sem e-mail'}">
+            ${eh !== null ? '✉ '+fmtH(eh) : '<span class="t-none">—</span>'}
+          </span>
+        </td>
+      </tr>`;
+    }).join('');
+  } else {
+    document.getElementById('t-body').innerHTML = data.map(x => {
+      const eh  = emailHoursCase(x);
+      const edt = emailCaseIdx[parseInt(x.case_id)];
+      const ho = hasHandoff(x);
+      const first = isFirstActor(x);
+      const mCls = mttrClass(x.mttr_h ? parseFloat(x.mttr_h) : null);
+      return `<tr class="${ho ? 'handoff' : ''}">
+        <td><code style="color:var(--muted2)">#${x.case_id}</code></td>
+        <td style="color:var(--accent2)">
+          👤 ${x.analista||'—'}
+          ${first ? '<span style="color:var(--green);font-size:10px;margin-left:4px">★ 1º</span>' : ''}
+        </td>
+        <td>
+          ${x.atual_owner && x.atual_owner !== x.analista
+            ? `<span style="color:var(--purple)">🔄 ${x.atual_owner}</span> <span class="badge handoff">HAND-OFF</span>`
+            : (x.atual_owner ? `<span style="color:var(--muted2)">${x.atual_owner}</span>` : '—')}
+        </td>
+        <td>🏢 ${x.customer||'—'}</td>
+        <td class="wrap">${x.name||''}</td>
+        <td><span class="badge ${(x.status||'').toLowerCase()}">${x.status||'?'}</span></td>
+        <td><span class="badge ${(x.severity||'unknown').toLowerCase()}">${x.severity||'?'}</span></td>
+        <td style="color:var(--muted2);font-size:12px">${(x.open_datetime||x.open_date||'—').replace('T',' ')}</td>
+        <td style="color:var(--muted2);font-size:12px">${(x.close_datetime||x.close_date||'—').replace('T',' ')}</td>
+        <td class="${mCls}">⏱ ${x.mttr_fmt||'—'}</td>
+        <td style="color:var(--muted2);font-size:12px">⏱ ${x.resp_fmt||'—'}</td>
+        <td>
+          <span class="${emailClass(eh)}"
+            title="${edt
+              ? 'E-mail: '+edt.toLocaleString('pt-BR')+'\nCase aberto: '+(x.open_datetime||x.open_date)
+              : 'Sem e-mail vinculado'}">
+            ${eh !== null && eh >= -0.17
+              ? '✉ '+fmtH(Math.max(0,eh))
+              : '<span class="t-none">—</span>'}
+          </span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function exportFiltered() {
+  const f = getFilters();
+  const onlyFirst = document.getElementById('toggle-first-only').checked;
+  const isAlert = view === 'alertas';
+  let data = (isAlert ? alertas : cases).filter(x => passesFilter(x, f, isAlert) && passesColumnFilters(x, isAlert));
+  if (onlyFirst) {
+    data = data.filter(x => isFirstActor(x));
+  }
+  if (!data.length) { alert('Nenhum dado para exportar.'); return; }
+  const headers = Object.keys(data[0]);
+  const csv = [
+    headers.join(';'),
+    ...data.map(row => headers.map(h => `"${(row[h]||'').replace(/"/g,'""').replace(/\n/g,' ')}"`).join(';'))
+  ].join('\n');
+  const modeLabel = onlyFirst ? 'produtividade' : 'esforco_total';
+  const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${view}_${modeLabel}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+['sel-analyst','sel-customer','sel-sev','sel-email','sel-handoff','dt-from','dt-to'].forEach(id => {
+  document.getElementById(id).addEventListener('change', updateAll);
+});
+document.getElementById('search').addEventListener('input', updateAll);
+document.getElementById('toggle-first-only').addEventListener('change', updateAll);
+</script>
+</body>
+</html>
