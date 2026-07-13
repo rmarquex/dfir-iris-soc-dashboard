@@ -24,7 +24,7 @@ python iris_analyst_report.py --from 01/05/2026 --to 26/05/2026
 python iris_analyst_report.py --date 26/05/2026
 
 # Um analista específico
-python iris_analyst_report.py --days 30 --analyst rodolfo.marques
+python iris_analyst_report.py --days 30 --analyst analista01
 
 # Com lista detalhada de alertas e cases
 python iris_analyst_report.py --days 30 --show-alerts --show-cases
